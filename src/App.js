@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
 // 替换为你部署的合约地址
-const contractAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
+const contractAddress = "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318";
 
 // 替换为你合约的 ABI (我们稍后会获取)
 const contractABI = [
@@ -70,6 +70,31 @@ const contractABI = [
 		type: "event",
 	},
 	{
+		anonymous: false,
+		inputs: [
+			{
+				indexed: true,
+				internalType: "address",
+				name: "creator",
+				type: "address",
+			},
+			{
+				indexed: false,
+				internalType: "uint256",
+				name: "taskId",
+				type: "uint256",
+			},
+			{
+				indexed: false,
+				internalType: "string",
+				name: "content",
+				type: "string",
+			},
+		],
+		name: "TaskUpdated",
+		type: "event",
+	},
+	{
 		inputs: [
 			{
 				internalType: "string",
@@ -91,6 +116,24 @@ const contractABI = [
 			},
 		],
 		name: "deleteTask",
+		outputs: [],
+		stateMutability: "nonpayable",
+		type: "function",
+	},
+	{
+		inputs: [
+			{
+				internalType: "uint256",
+				name: "taskId",
+				type: "uint256",
+			},
+			{
+				internalType: "string",
+				name: "newContent",
+				type: "string",
+			},
+		],
+		name: "editTask",
 		outputs: [],
 		stateMutability: "nonpayable",
 		type: "function",
@@ -179,6 +222,8 @@ function App() {
 	const [contract, setContract] = useState(null);
 	const [newTaskContent, setNewTaskContent] = useState("");
 	const [tasks, setTasks] = useState([]);
+	const [editingTaskId, setEditingTaskId] = useState(null);
+	const [editText, setEditText] = useState("");
 
 	const fetchTasks = async () => {
 		if (contract && walletAddress) {
@@ -223,6 +268,61 @@ function App() {
 		}
 	};
 
+	const handleMarkAsDone = async (taskId) => {
+		if (!contract) {
+			console.error("Contract not connected!");
+			return;
+		}
+
+		try {
+			const transaction = await contract.markAsDone(taskId);
+			console.log(`Marking task ${taskId} as done...`, transaction.hash);
+			await transaction.wait(); // 等待交易被确认
+			console.log(`Task ${taskId} marked as done successfully!`);
+			// 重新获取任务列表以更新 UI
+			fetchTasks();
+		} catch (error) {
+			console.error(`Error marking task ${taskId} as done:`, error);
+		}
+	};
+
+	const handleDeleteTask = async (taskId) => {
+		if (!contract) {
+			console.error("Contract not connected!");
+			return;
+		}
+
+		try {
+			const transaction = await contract.deleteTask(taskId);
+			console.log(`Deleting task ${taskId}...`, transaction.hash);
+			await transaction.wait(); // 等待交易被确认
+			console.log(`Task ${taskId} deleted successfully!`);
+			// 重新获取任务列表以更新 UI
+			fetchTasks();
+		} catch (error) {
+			console.error(`Error deleting task ${taskId}:`, error);
+		}
+	};
+
+	const handleSaveEdit = async (taskId) => {
+		if (!contract) {
+			console.error("Contract not connected!");
+			return;
+		}
+
+		try {
+			const transaction = await contract.editTask(taskId, editText);
+			console.log(`Editing task ${taskId} to: ${editText}...`, transaction.hash);
+			await transaction.wait(); // 等待交易被确认
+			console.log(`Task ${taskId} edited successfully!`);
+			setEditingTaskId(null); // 退出编辑模式
+			setEditText(""); // 清空编辑框
+			fetchTasks(); // 重新获取任务列表以更新 UI
+		} catch (error) {
+			console.error(`Error editing task ${taskId}:`, error);
+		}
+	};
+
 	useEffect(() => {
 		if (contract && walletAddress) {
 			fetchTasks();
@@ -261,7 +361,40 @@ function App() {
 					<ul>
 						{tasks.map((task, index) => (
 							<li key={index}>
-								{task.content} - {task.isCompleted ? "Completed" : "Pending"}
+								{editingTaskId === index ? (
+									<>
+										<input
+											type="text"
+											value={editText}
+											onChange={(e) => setEditText(e.target.value)}
+										/>
+										<button onClick={() => handleSaveEdit(index)} disabled={!contract}>
+											Save
+										</button>
+										<button onClick={() => setEditingTaskId(null)}>Cancel</button>
+									</>
+								) : (
+									<>
+										{task.content} - {task.isCompleted ? "Completed" : "Pending"}
+										{!task.isCompleted && (
+											<button onClick={() => handleMarkAsDone(index)} disabled={!contract}>
+												Mark as Done
+											</button>
+										)}
+										<button
+											onClick={() => {
+												setEditingTaskId(index);
+												setEditText(task.content);
+											}}
+											disabled={!contract}
+										>
+											Edit
+										</button>
+										<button onClick={() => handleDeleteTask(index)} disabled={!contract}>
+											Delete
+										</button>
+									</>
+								)}
 							</li>
 						))}
 					</ul>
